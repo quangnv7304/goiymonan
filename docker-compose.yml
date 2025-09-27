@@ -32,6 +32,7 @@ services:
     depends_on:
       - db
       - redis
+      - rl-service # đảm bảo rl-service start trước
 
   rl-service:
     image: tiangolo/uvicorn-gunicorn-fastapi:python3.11
@@ -39,7 +40,12 @@ services:
       - ./rl_mock:/app
     ports:
       - "8000:8000"
-    restart: "no"
+    environment:
+      - MODULE_NAME=main # đảm bảo uvicorn load đúng file
+      - VARIABLE_NAME=app
+      - PORT=8000
+      - HOST=0.0.0.0
+    restart: always
 
 volumes:
   pgdata:

@@ -13,6 +13,11 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+app.get('/', (req, res) => {
+  res.send('Chào mừng đến với API nhóm 5');
+});
+
+
 app.use('/recommendations', recommendationRouter);
 app.use('/feedback', feedbackRouter);
 
