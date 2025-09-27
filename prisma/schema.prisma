@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -8,49 +9,51 @@ datasource db {
 }
 
 model User {
-  id          Int       @id @default(autoincrement())
-  name        String?
-  preferences Json?     @default("{}")
-  createdAt   DateTime  @default(now())
+  id              Int              @id @default(autoincrement())
+  name            String?
+  preferences     Json?            @default("{}")
+  createdAt       DateTime         @default(now())
   userIngredients UserIngredient[]
-  history     History[]
+  history         History[]
 }
 
 model Ingredient {
-  id   Int    @id @default(autoincrement())
-  name String @unique
+  id              Int                  @id @default(autoincrement())
+  name            String               @unique
   // relation
   userIngredients UserIngredient[]
-  recipes RecipeOnIngredient[]
+  recipes         RecipeOnIngredient[]
 }
 
 model Recipe {
-  id          Int      @id @default(autoincrement())
-  name        String
-  description String?
+  id                Int                  @id @default(autoincrement())
+  name              String
+  description       String?
   // store base ingredients in relation table with qty
   recipeIngredients RecipeOnIngredient[]
-  createdAt   DateTime @default(now())
-  history     History[]
+  createdAt         DateTime             @default(now())
+  history           History[]
 }
 
 model RecipeOnIngredient {
-  id           Int @id @default(autoincrement())
-  recipe       Recipe @relation(fields: [recipeId], references: [id])
+  id           Int        @id @default(autoincrement())
+  recipe       Recipe     @relation(fields: [recipeId], references: [id])
   recipeId     Int
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
   ingredientId Int
-  qty          Float @default(1)
+  qty          Float      @default(1)
+
   @@unique([recipeId, ingredientId])
 }
 
 model UserIngredient {
-  id           Int @id @default(autoincrement())
-  user         User @relation(fields: [userId], references: [id])
+  id           Int        @id @default(autoincrement())
+  user         User       @relation(fields: [userId], references: [id])
   userId       Int
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
   ingredientId Int
-  qty          Float @default(1)
+  qty          Float      @default(1)
+
   @@unique([userId, ingredientId])
 }
 
