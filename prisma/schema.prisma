@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          Int       @id @default(autoincrement())
+  name        String?
+  preferences Json?     @default("{}")
+  createdAt   DateTime  @default(now())
+  userIngredients UserIngredient[]
+  history     History[]
+}
+
+model Ingredient {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+  // relation
+  userIngredients UserIngredient[]
+  recipes RecipeOnIngredient[]
+}
+
+model Recipe {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  // store base ingredients in relation table with qty
+  recipeIngredients RecipeOnIngredient[]
+  createdAt   DateTime @default(now())
+  history     History[]
+}
+
+model RecipeOnIngredient {
+  id           Int @id @default(autoincrement())
+  recipe       Recipe @relation(fields: [recipeId], references: [id])
+  recipeId     Int
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredientId Int
+  qty          Float @default(1)
+  @@unique([recipeId, ingredientId])
+}
+
+model UserIngredient {
+  id           Int @id @default(autoincrement())
+  user         User @relation(fields: [userId], references: [id])
+  userId       Int
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredientId Int
+  qty          Float @default(1)
+  @@unique([userId, ingredientId])
+}
+
+model History {
+  id         Int      @id @default(autoincrement())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     Int
+  recipe     Recipe   @relation(fields: [recipeId], references: [id])
+  recipeId   Int
+  actionType String?
+  feedback   String?
+  reward     Float?
+  state      Json?
+  nextState  Json?
+  createdAt  DateTime @default(now())
+}
