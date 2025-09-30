@@ -25,7 +25,7 @@ app.use((req, _res, next) => {
 
 app.get('/', (_req, res) => res.send('Chào mừng đến với API nhóm 5'));
 
-app.use('/recommendations', recommendationRouter);
+app.use('/recommendations', recommendationRouter); // Đề xuất món ăn
 app.use('/feedback', feedbackRouter);
 app.use('/recipes', recipeRouter);
 

@@ -57,20 +57,4 @@ export async function postRecommend(req: Request, res: Response) {
       console.warn("⚠️ RL service unreachable:", e?.message);
     }
   }
-
-  // 3) Fallback: chọn ngẫu nhiên + sắp xếp “score” tạm
-  const shuffled = [...filtered].sort(() => Math.random() - 0.5);
-  const chosen = shuffled[0].recipe_id;
-  const scored: Rec[] = shuffled.map((r, idx) => ({
-    recipe_id: r.recipe_id,
-    score: Number((1 - idx / shuffled.length).toFixed(3)),
-  }));
-  const alternatives = scored.filter((x) => x.recipe_id !== chosen).slice(0, k - 1);
-
-  return res.json({
-    chosen_id: chosen,
-    alternatives,
-    epsilon: 1,
-    total_candidates: filtered.length,
-  });
 }
