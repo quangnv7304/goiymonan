@@ -16,4 +16,5 @@ RUN npm run build
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev"]
+# Khi container khởi động -> migrate + seed -> start app
+CMD npx prisma migrate deploy && npx prisma db seed && npm run dev

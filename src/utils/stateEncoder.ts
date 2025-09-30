@@ -1,46 +1,41 @@
 import { prisma } from '../prismaClient';
 
-let ingredientIndexMap: Record<number, number> | null = null;
-
-export async function buildIngredientIndexMap() {
-  if (ingredientIndexMap) return ingredientIndexMap;
-  const ingredients = await prisma.ingredient.findMany({ select: { id: true } });
-  ingredientIndexMap = {};
-  ingredients.forEach((ing, idx) => { ingredientIndexMap![ing.id] = idx; });
-  return ingredientIndexMap;
+/**
+ * Chuẩn hóa chuỗi nguyên liệu người dùng nhập (tách dấu phẩy, trim, lower)
+ */
+export function parseAvailInput(avail: string[] | string): string[] {
+  if (Array.isArray(avail)) return avail.map(s => s.trim().toLowerCase()).filter(Boolean);
+  return avail.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 }
 
-export function makeMultiHot(ids: number[], indexMap: Record<number, number>) {
-  const len = Object.keys(indexMap).length;
-  const vec = new Array(len).fill(0);
-  ids.forEach(id => {
-    const idx = indexMap[id];
-    if (idx !== undefined) vec[idx] = 1;
+/**
+ * Lấy danh sách nguyên liệu (tên, qty) của 1 recipe
+ */
+export async function getRecipeIngredients(recipe_id: number) {
+  const rows = await prisma.recipeOnIngredient.findMany({
+    where: { recipe_id },
+    include: { ingredient: true },
   });
-  return vec;
+  return rows.map(r => ({
+    ingredient_id: r.ingredient_id,
+    name: r.ingredient.name.toLowerCase(),
+    qty: r.quantity ?? 1,
+  }));
 }
 
-export async function getUserIngredients(userId: number) {
-  const rows = await prisma.userIngredient.findMany({ where: { userId } });
-  return rows.map(r => ({ id: r.ingredientId, qty: r.qty }));
-}
+/**
+ * Tính tỷ lệ khớp nguyên liệu giữa pantry (avail) và recipe
+ * - matchRatio: số nguyên liệu trong recipe có mặt trong avail / tổng nguyên liệu recipe
+ * - thiếu quan trọng: mặc định coi nguyên liệu đầu danh sách là "quan trọng"
+ */
+export function computeMatch(avail: string[], recipeIngs: { name: string }[]) {
+  const set = new Set(avail);
+  const total = recipeIngs.length || 1;
+  const matched = recipeIngs.filter(x => set.has(x.name)).length;
+  const matchRatio = matched / total;
 
-export async function buildState(userId: number) {
-  const Iavail = await getUserIngredients(userId);
-  const indexMap = await buildIngredientIndexMap();
-  const ingredientVector = makeMultiHot(Iavail.map(i => i.id), indexMap);
-  const recent = await prisma.history.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
-    take: 10
-  });
-  const H = recent.map(r => ({ recipe_id: r.recipeId, feedback: r.feedback }));
-  return {
-    user_id: userId,
-    Iavail,
-    Imiss: [],
-    H,
-    ingredient_vector: ingredientVector,
-    timestamp: new Date().toISOString()
-  };
+  const importantMissing =
+    recipeIngs.length > 0 && !set.has(recipeIngs[0].name); // thiếu nguyên liệu đầu tiên
+
+  return { matchRatio, importantMissing };
 }

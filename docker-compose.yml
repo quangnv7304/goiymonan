@@ -11,6 +11,11 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d recipes"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7
@@ -19,7 +24,7 @@ services:
 
   backend:
     build: .
-    command: npm run dev
+    command: sh -c "npx prisma migrate deploy && npx prisma db seed && npm run dev"
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
@@ -30,21 +35,17 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - db
-      - redis
-      - rl-service # đảm bảo rl-service start trước
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rl-service:
+        condition: service_started
 
   rl-service:
-    image: tiangolo/uvicorn-gunicorn-fastapi:python3.11
-    volumes:
-      - ./rl_mock:/app
+    build: ./rl/q-learning
     ports:
       - "8000:8000"
-    environment:
-      - MODULE_NAME=main # đảm bảo uvicorn load đúng file
-      - VARIABLE_NAME=app
-      - PORT=8000
-      - HOST=0.0.0.0
     restart: always
 
 volumes:

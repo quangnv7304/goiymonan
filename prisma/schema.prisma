@@ -9,64 +9,114 @@ datasource db {
 }
 
 model User {
-  id              Int              @id @default(autoincrement())
-  name            String?
-  preferences     Json?            @default("{}")
-  createdAt       DateTime         @default(now())
-  userIngredients UserIngredient[]
-  history         History[]
-}
+  user_id    Int      @id @default(autoincrement())
+  username   String   @unique
+  email      String   @unique
+  password   String
+  created_at DateTime @default(now())
 
-model Ingredient {
-  id              Int                  @id @default(autoincrement())
-  name            String               @unique
-  // relation
-  userIngredients UserIngredient[]
-  recipes         RecipeOnIngredient[]
+  recipes Recipe[]
+  states  State[]
+  reviews Review[]
+  rewards Reward[]
 }
 
 model Recipe {
-  id                Int                  @id @default(autoincrement())
-  name              String
-  description       String?
-  // store base ingredients in relation table with qty
-  recipeIngredients RecipeOnIngredient[]
-  createdAt         DateTime             @default(now())
-  history           History[]
+  recipe_id    Int      @id @default(autoincrement())
+  name         String
+  description  String?
+  instructions String?
+  created_at   DateTime @default(now())
+
+  author    User? @relation(fields: [author_id], references: [user_id])
+  author_id Int?
+
+  ingredients RecipeOnIngredient[]
+  actions     Action[]
+  reviews     Review[]
+}
+
+model Ingredient {
+  ingredient_id Int     @id @default(autoincrement())
+  name          String
+  unit          String?
+
+  recipes RecipeOnIngredient[]
 }
 
 model RecipeOnIngredient {
-  id           Int        @id @default(autoincrement())
-  recipe       Recipe     @relation(fields: [recipeId], references: [id])
-  recipeId     Int
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
-  ingredientId Int
-  qty          Float      @default(1)
+  recipe_id     Int
+  ingredient_id Int
+  quantity      Float?
 
-  @@unique([recipeId, ingredientId])
+  recipe     Recipe     @relation(fields: [recipe_id], references: [recipe_id])
+  ingredient Ingredient @relation(fields: [ingredient_id], references: [ingredient_id])
+
+  @@id([recipe_id, ingredient_id])
 }
 
-model UserIngredient {
-  id           Int        @id @default(autoincrement())
-  user         User       @relation(fields: [userId], references: [id])
-  userId       Int
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
-  ingredientId Int
-  qty          Float      @default(1)
+model Action {
+  action_id   Int     @id @default(autoincrement())
+  description String?
+  recipe_id   Int?
 
-  @@unique([userId, ingredientId])
+  recipe Recipe?  @relation(fields: [recipe_id], references: [recipe_id])
+  qTable QTable[]
+  Reward Reward[]
 }
 
-model History {
-  id         Int      @id @default(autoincrement())
-  user       User     @relation(fields: [userId], references: [id])
-  userId     Int
-  recipe     Recipe   @relation(fields: [recipeId], references: [id])
-  recipeId   Int
-  actionType String?
-  feedback   String?
-  reward     Float?
-  state      Json?
-  nextState  Json?
-  createdAt  DateTime @default(now())
+model State {
+  state_id              Int      @id @default(autoincrement())
+  available_ingredients Json?
+  context               Json?
+  created_at            DateTime @default(now())
+
+  user    User? @relation(fields: [user_id], references: [user_id])
+  user_id Int?
+
+  qTable  QTable[]
+  rewards Reward[]
+}
+
+model QTable {
+  q_id       Int      @id @default(autoincrement())
+  q_value    Float    @default(0)
+  updated_at DateTime @default(now())
+
+  state_id  Int
+  action_id Int
+
+  state  State  @relation(fields: [state_id], references: [state_id])
+  action Action @relation(fields: [action_id], references: [action_id])
+
+  @@unique([state_id, action_id])
+}
+
+model Review {
+  review_id  Int      @id @default(autoincrement())
+  rating     Int
+  comment    String?
+  created_at DateTime @default(now())
+
+  user_id   Int
+  recipe_id Int
+
+  user   User   @relation(fields: [user_id], references: [user_id])
+  recipe Recipe @relation(fields: [recipe_id], references: [recipe_id])
+
+  @@unique([user_id, recipe_id]) // 1 user chỉ review 1 recipe 1 lần
+}
+
+model Reward {
+  reward_id    Int      @id @default(autoincrement())
+  reward_value Float?
+  created_at   DateTime @default(now())
+
+  state_id  Int
+  action_id Int
+  user_id   Int
+
+  state  State  @relation(fields: [state_id], references: [state_id])
+  action Action @relation(fields: [action_id], references: [action_id])
+  user   User   @relation(fields: [user_id], references: [user_id])
 }

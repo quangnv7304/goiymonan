@@ -1,27 +1,76 @@
-import { Request, Response } from 'express';
-import { buildState } from '../utils/stateEncoder';
-import { getPredictions } from '../services/rlService';
-import { prisma } from '../prismaClient';
+import { Request, Response } from "express";
+import axios from "axios";
+import { prisma } from "../prismaClient";
+import { parseAvailInput } from "../utils/stateEncoder";
 
-export async function getRecommendations(req: Request, res: Response) {
-  try {
-    const userId = Number(req.query.user_id);
-    const k = Number(req.query.k) || 3;
-    if (!userId) return res.status(400).json({ error: 'user_id required' });
+type Rec = { recipe_id: number; score: number };
 
-    const state = await buildState(userId);
-    const preds = await getPredictions(state, k); // [{recipe_id, score}]
-    const recipeIds = preds.map((p: any) => p.recipe_id);
-    // fetch recipes
-    const recipes = await prisma.recipe.findMany({ where: { id: { in: recipeIds } } });
-    const mapped = preds.map((p: any) => ({
-      recipe_id: p.recipe_id,
-      score: p.score,
-      recipe: recipes.find(r => r.id === p.recipe_id) || null
-    }));
-    return res.json({ success: true, recommendations: mapped });
-  } catch (err: any) {
-    console.error(err);
-    return res.status(500).json({ success: false, error: err.message });
+export async function postRecommend(req: Request, res: Response) {
+  const { state, k = 5 } = req.body ?? {};
+  if (!state) return res.status(400).json({ message: "state is required" });
+
+  const avail = parseAvailInput(state.avail ?? []);         // ['thịt bò', ...] (đã normalize)
+  const availSet = new Set(avail.map((s: string) => s.toLowerCase()));
+  const RL_BASE = process.env.RL_BASE;
+
+  // 1) Lấy danh sách recipes rồi lọc theo nguyên liệu có trong avail
+  const allRecipes = await prisma.recipe.findMany({
+    include: { ingredients: { include: { ingredient: true } } },
+  });
+
+  const filtered = allRecipes.filter((r) =>
+    r.ingredients.some((ri) => availSet.has(ri.ingredient.name.toLowerCase()))
+  );
+
+  if (!filtered.length) {
+    return res.json({
+      chosen_id: null,
+      alternatives: [],
+      epsilon: 1,
+      total_candidates: 0,
+      message: "Không tìm thấy công thức phù hợp",
+    });
   }
+
+  // 2) Gửi sang RL-service
+  if (RL_BASE) {
+    try {
+      const { data } = await axios.post(`${RL_BASE}/predict`, {
+        state: { avail, miss: [], history: state.history ?? [] },
+        k,
+        possible_actions: filtered.map((r) => r.recipe_id),
+      });
+
+      console.log("📤 RL-service response:", JSON.stringify(data, null, 2));
+
+      // Tìm công thức được chọn trong DB
+      const chosenRecipe = await prisma.recipe.findUnique({
+        where: { recipe_id: data.chosen },
+        include: { ingredients: { include: { ingredient: true } } },
+      });
+
+      return res.json({
+        chosen: chosenRecipe,
+        epsilon: data.epsilon,
+      });
+    } catch (e: any) {
+      console.warn("⚠️ RL service unreachable:", e?.message);
+    }
+  }
+
+  // 3) Fallback: chọn ngẫu nhiên + sắp xếp “score” tạm
+  const shuffled = [...filtered].sort(() => Math.random() - 0.5);
+  const chosen = shuffled[0].recipe_id;
+  const scored: Rec[] = shuffled.map((r, idx) => ({
+    recipe_id: r.recipe_id,
+    score: Number((1 - idx / shuffled.length).toFixed(3)),
+  }));
+  const alternatives = scored.filter((x) => x.recipe_id !== chosen).slice(0, k - 1);
+
+  return res.json({
+    chosen_id: chosen,
+    alternatives,
+    epsilon: 1,
+    total_candidates: filtered.length,
+  });
 }
