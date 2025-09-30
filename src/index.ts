@@ -26,8 +26,8 @@ app.use((req, _res, next) => {
 app.get('/', (_req, res) => res.send('Chào mừng đến với API nhóm 5'));
 
 app.use('/recommendations', recommendationRouter); // Đề xuất món ăn
-app.use('/feedback', feedbackRouter);
-app.use('/recipes', recipeRouter);
+app.use('/feedback', feedbackRouter); // Phản hồi món ăn
+app.use('/recipes', recipeRouter); // Danh sách công thức nấu ăn
 
 const PORT = process.env.PORT || 3000;
 

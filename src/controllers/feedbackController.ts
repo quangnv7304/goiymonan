@@ -18,41 +18,38 @@ export async function postFeedback(req: Request, res: Response) {
         .json({ message: "recipeId & actionType are required" });
     }
 
-    // --- Parse nguyên liệu người dùng nhập ---
+    // --- Parse nguyên liệu user nhập ---
     const availIngredients = parseAvailInput(state?.avail ?? []);
 
     // --- Lấy nguyên liệu của recipe từ DB ---
     const recipeIngredients = await getRecipeIngredients(Number(recipeId));
 
-    // --- Tính reward theo match ratio / missing ingredients ---
-    let reward_value = calculateReward(
-      availIngredients,
-      recipeIngredients,
-      actionType
-    );
+    // --- Tính reward cơ bản ---
+    let reward = calculateReward(availIngredients, recipeIngredients, actionType);
 
     // --- Check lặp lại bằng Redis ---
-    const historyKey = `user:1:recipe:${recipeId}:count`; // TODO: thay user_id thật
+    const historyKey = `user:1:recipe:${recipeId}:count`; // TODO: bind user_id
     const repeats = await redis.incr(historyKey);
-    await redis.expire(historyKey, 3600); // expire sau 1h
+    await redis.expire(historyKey, 3600);
 
     if (repeats > 2) {
-      reward_value -= 10; // bị lặp lại nhiều lần → phạt thêm
+      reward.total -= 10;
+      reward.details["repeatPenalty"] = -10;
     }
 
-    // --- Forward sang RL service ---
+    // --- Forward sang RL-service ---
     const RL_BASE = process.env.RL_BASE;
     if (RL_BASE && state) {
       try {
         await axios.post(`${RL_BASE}/feedback`, {
           state,
           action: recipeId,
-          reward: reward_value,
+          reward: reward.total,
           next_state: state,
           done: false,
         });
         console.log(
-          `✅ Forwarded feedback → RL service (reward=${reward_value})`
+          `✅ Forwarded feedback → RL service (reward=${reward.total})`
         );
       } catch (err: any) {
         console.warn("⚠️ RL feedback forward failed:", err?.message);
@@ -64,7 +61,7 @@ export async function postFeedback(req: Request, res: Response) {
       data: {
         available_ingredients: availIngredients,
         context: { actionType },
-        user_id: 1,
+        user_id: 1, // TODO: bind user thật
       },
     });
 
@@ -72,28 +69,36 @@ export async function postFeedback(req: Request, res: Response) {
     let action = await prisma.action.findFirst({ where: { recipe_id: recipeId } });
     if (!action) {
       action = await prisma.action.create({
-        data: { recipe_id: recipeId, description: `Action for recipe ${recipeId}` },
+        data: {
+          recipe_id: recipeId,
+          description: `Action for recipe ${recipeId}`,
+        },
       });
     }
 
-    // --- Lưu reward vào DB ---
+    // --- Lưu reward ---
     await prisma.reward.create({
       data: {
         user_id: 1,
         state_id: dbState.state_id,
         action_id: action.action_id,
-        reward_value,
+        reward_value: reward.total,
       },
     });
 
-    // --- Push job vào queue ---
-    await feedbackQueue.add({ recipeId, actionType, reward_value });
+    // --- Push vào queue ---
+    await feedbackQueue.add({ recipeId, actionType, reward: reward.total });
 
     console.log(
-      `💾 Feedback saved: recipe=${recipeId}, action=${actionType}, reward=${reward_value}`
+      `💾 Feedback saved: recipe=${recipeId}, action=${actionType}, reward=${reward.total}`
     );
 
-    return res.json({ success: true, reward_value, repeats });
+    return res.json({
+      success: true,
+      reward: reward.total,
+      details: reward.details,
+      repeats,
+    });
   } catch (err: any) {
     console.error("❌ postFeedback error:", err);
     return res.status(500).json({ message: "Internal Server Error" });

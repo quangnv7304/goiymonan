@@ -29,13 +29,17 @@ export async function getRecipeIngredients(recipe_id: number) {
  * - thiếu quan trọng: mặc định coi nguyên liệu đầu danh sách là "quan trọng"
  */
 export function computeMatch(avail: string[], recipeIngs: { name: string }[]) {
-  const set = new Set(avail);
+  const set = new Set(avail.map(x => x.toLowerCase()));   // chuẩn hóa avail
   const total = recipeIngs.length || 1;
-  const matched = recipeIngs.filter(x => set.has(x.name)).length;
+
+  // Đếm số nguyên liệu match
+  const matched = recipeIngs.filter(x => set.has(x.name.toLowerCase())).length;
   const matchRatio = matched / total;
 
+  // Check "thiếu nguyên liệu quan trọng"
   const importantMissing =
-    recipeIngs.length > 0 && !set.has(recipeIngs[0].name); // thiếu nguyên liệu đầu tiên
+    recipeIngs.length > 0 && !set.has(recipeIngs[0].name.toLowerCase());
 
   return { matchRatio, importantMissing };
 }
+
